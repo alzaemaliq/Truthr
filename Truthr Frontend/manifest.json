@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Truthr",
   "version": "1.0",
-  "permissions": ["tabs", "scripting"],
+  "permissions": ["tabs", "scripting", "sidePanel"],
   "host_permissions": ["*://*.youtube.com/*"],
   "background": {
     "service_worker": "background.js"
@@ -12,5 +12,12 @@
       "matches": ["*://www.youtube.com/watch*"],
       "js": ["content.js"]
     }
-  ]
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_icon": "icon.png",
+    "default_title": "Truthr"
+  }
 }
