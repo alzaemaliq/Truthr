@@ -1,14 +1,19 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import types
-import base64
 from youtube_transcript_api import YouTubeTranscriptApi
 import json
+import os
+from starlette.concurrency import run_in_threadpool
+from threading import Lock
 
-VIDEO_ID = "R2meHtrO1n8"
+MAX_REQUESTS = 1000
+request_count = 0
+request_lock = Lock()
 
-# Fetching YouTube Transcript
-transcript = YouTubeTranscriptApi.get_transcript(VIDEO_ID)
-only_text = "Transcript:\n" + " ".join([entry['text'] for entry in transcript])
+
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "truthr-337e8ae71241.json"
 
 system_prompt = """
 You are an expert fact-checker and analyst. Your primary objective is to meticulously analyze a given transcript for factual inaccuracies, misleading statements, and unverifiable claims. You are impartial, precise, and rely solely on credible, verifiable sources. You are thorough in your analysis and clear in your presentation of findings. Your tone is neutral and objective.
@@ -66,156 +71,137 @@ Format the output as a JSON array like this:
 Be precise, concise, and consistent in output structure. Input Below:
 """
 
-# Model Settings
-def generate():
-  client = genai.Client(
-      vertexai=True,
-      project="truthr",
-      location="global",
-  )
+app = FastAPI()
 
-  model = "gemini-2.5-pro"
-  contents = [
-    types.Content(
-      role="user",
-      parts=[
-        types.Part.from_text(text=system_prompt + only_text)
-      ]
-    ),
-  ]
-  tools = [
-    types.Tool(google_search=types.GoogleSearch()),
-  ]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["chrome-extension://khamidenhdcccdekdeafdoiojpnjcjmh"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-  generate_content_config = types.GenerateContentConfig(
-    temperature = 0,
-    top_p = 0.7,
-    seed = -274817027,
-    max_output_tokens = 65535,
-    safety_settings = [types.SafetySetting(
-      category="HARM_CATEGORY_HATE_SPEECH",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_DANGEROUS_CONTENT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_HARASSMENT",
-      threshold="OFF"
-    )],
-    tools = tools,
-    thinking_config=types.ThinkingConfig(
-      thinking_budget=-1,
-    ),
-  )
-
-
-  # Streaming Model Response
-  full_text=""
-  final_response = None
-  for chunk in client.models.generate_content_stream(
-    model=model,
-    contents=contents,
-    config=generate_content_config,
-  ):
-      if chunk.text:
-          full_text += chunk.text
-      final_response = chunk
-
-  full_text += "\n\n"
-
-  # Citation Metadata
-  full_text += "\n\n---\n**Citation Sources:**\n"
-  citation_data = final_response.candidates[0].citation_metadata if final_response else None
-  if citation_data and citation_data.citations:
-      for citation in citation_data.citations:
-          full_text += f"- {citation.uri}\n"
-  else:
-      full_text += "No citation sources found.\n"
-
-  # Grounding Metadata
-  gm = final_response.candidates[0].grounding_metadata if final_response else None
-  if gm and gm.grounding_supports and gm.grounding_chunks:
-      full_text += "\n---\n**Grounding Sources with Segments:**\n"
-      chunks = gm.grounding_chunks
-      for i, support in enumerate(gm.grounding_supports, start=1):
-          seg = support.segment
-          start = seg.start_index
-          end = seg.end_index
-          chunk_indices = support.grounding_chunk_indices
-          uris = []
-          for idx in chunk_indices:
-              try:
-                  uri = chunks[idx].web.uri if chunks[idx] and chunks[idx].web and chunks[idx].web.uri else "[No URI]"
-                  uris.append(uri)
-              except (IndexError, TypeError, AttributeError):
-                  uris.append("[Invalid or missing chunk]")
-          full_text += f"{i}. Segment [{start}:{end}] grounded by chunk(s) {chunk_indices} → {uris}\n"
-  else:
-      full_text += "\n---\nNo grounding metadata or no grounding supports available.\n"
-  
-  return(full_text)
-
-def postprocess(full_text):
-  client = genai.Client(
-      vertexai=True,
-      project="truthr",
-      location="global",
-  )
-
-
-  model = "gemini-2.5-flash"
-  contents = [
-    types.Content(
-      role="user",
-      parts=[
-          types.Part.from_text(text=cleanup_prompt + full_text)
-      ]
-    )
-  ]
-
-  generate_content_config = types.GenerateContentConfig(
-    temperature = 0,
-    top_p = 0.7,
-    seed = 0,
-    max_output_tokens = 65535,
-    safety_settings = [types.SafetySetting(
-      category="HARM_CATEGORY_HATE_SPEECH",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_DANGEROUS_CONTENT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-      threshold="OFF"
-    ),types.SafetySetting(
-      category="HARM_CATEGORY_HARASSMENT",
-      threshold="OFF"
-    )],
-    response_mime_type = "application/json",
-    response_schema = {"type":"OBJECT","properties":{"response":{"type":"STRING"}}},
-    thinking_config=types.ThinkingConfig(
-      thinking_budget=-1,
-    ),
-  )
-
-  result = client.models.generate_content(
+def run_streaming_call(client, model, contents, config):
+    full_text = ""
+    final_response = None
+    for chunk in client.models.generate_content_stream(
         model=model,
         contents=contents,
-        config=generate_content_config,
+        config=config
+    ):
+        if chunk.text:
+            full_text += chunk.text
+        final_response = chunk
+    return full_text, final_response
+
+@app.get("/analyze/{video_id}")
+async def analyze(video_id: str):
+    global request_count
+
+    with request_lock:
+        if request_count >= MAX_REQUESTS:
+            return {"error": "Request limit reached (1000 hits)."}
+        request_count += 1
+    # Get transcript
+    transcript = YouTubeTranscriptApi.get_transcript(video_id)
+    only_text = "Transcript:\n" + " ".join([entry['text'] for entry in transcript])
+
+    # Initialize Gemini client
+    client = genai.Client(
+        vertexai=True,
+        project="truthr",
+        location="global",
     )
 
-    # Extract and pretty-print JSON
-  raw_response = result.candidates[0].content.parts[0].text
-  try:
-    response_dict = json.loads(raw_response)  # {"response": "[{...}]"}
-    formatted = json.loads(response_dict["response"])  # actual list of claims
-    print(json.dumps(formatted, indent=2))
-  except Exception as e:
-    print("Failed to parse response:", e)
-    print("Raw output:", raw_response)
+    # Generate content (first model)
+    model = "gemini-2.5-pro"
+    contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=system_prompt + only_text)]
+        ),
+    ]
+    tools = [types.Tool(google_search=types.GoogleSearch())]
+    config = types.GenerateContentConfig(
+        temperature=0,
+        top_p=0.7,
+        seed=-274817027,
+        max_output_tokens=65535,
+        safety_settings=[
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF")
+        ],
+        tools=tools,
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+    )
 
-full_text = generate()
-postprocess(full_text)
+    full_text, final_response = await run_in_threadpool(
+    run_streaming_call, client, model, contents, config
+    )
+
+    # Add citations
+    full_text += "\n\n---\n**Citation Sources:**\n"
+    citations = final_response.candidates[0].citation_metadata if final_response else None
+    if citations and citations.citations:
+        for citation in citations.citations:
+            full_text += f"- {citation.uri}\n"
+    else:
+        full_text += "No citation sources found.\n"
+
+    # Add grounding metadata
+    gm = final_response.candidates[0].grounding_metadata if final_response else None
+    if gm and gm.grounding_supports and gm.grounding_chunks:
+        full_text += "\n---\n**Grounding Sources with Segments:**\n"
+        chunks = gm.grounding_chunks
+        for i, support in enumerate(gm.grounding_supports, start=1):
+            seg = support.segment
+            start, end = seg.start_index, seg.end_index
+            uris = []
+            for idx in support.grounding_chunk_indices:
+                try:
+                    uri = chunks[idx].web.uri if chunks[idx] and chunks[idx].web and chunks[idx].web.uri else "[No URI]"
+                    uris.append(uri)
+                except Exception:
+                    uris.append("[Invalid or missing chunk]")
+            full_text += f"{i}. Segment [{start}:{end}] grounded by chunk(s) {support.grounding_chunk_indices} → {uris}\n"
+    else:
+        full_text += "\n---\nNo grounding metadata or no grounding supports available.\n"
+
+    # Postprocess the full_text with second model
+    post_contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=cleanup_prompt + full_text)]
+        )
+    ]
+    post_config = types.GenerateContentConfig(
+        temperature=0,
+        top_p=0.7,
+        seed=0,
+        max_output_tokens=65535,
+        safety_settings=[
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF")
+        ],
+        response_mime_type="application/json",
+        response_schema={"type": "OBJECT", "properties": {"response": {"type": "STRING"}}},
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+    )
+
+    result = client.models.generate_content(model="gemini-2.5-flash", contents=post_contents, config=post_config)
+
+    raw_response = result.candidates[0].content.parts[0].text
+    try:
+        response_dict = json.loads(raw_response)
+        formatted = json.loads(response_dict["response"])
+        return {"claims": formatted}
+    except Exception as e:
+        return {
+            "error": "Failed to parse postprocessed output",
+            "details": str(e),
+            "raw_output": raw_response
+        }

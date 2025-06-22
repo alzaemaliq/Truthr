@@ -6,6 +6,11 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import json
 import os
 from starlette.concurrency import run_in_threadpool
+from threading import Lock
+
+MAX_REQUESTS = 1000
+request_count = 0
+request_lock = Lock()
 
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "truthr-337e8ae71241.json"
@@ -91,6 +96,12 @@ def run_streaming_call(client, model, contents, config):
 
 @app.get("/analyze/{video_id}")
 async def analyze(video_id: str):
+    global request_count
+
+    with request_lock:
+        if request_count >= MAX_REQUESTS:
+            return {"error": "Request limit reached (1000 hits)."}
+        request_count += 1
     # Get transcript
     transcript = YouTubeTranscriptApi.get_transcript(video_id)
     only_text = "Transcript:\n" + " ".join([entry['text'] for entry in transcript])
