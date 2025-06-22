@@ -1,3 +1,5 @@
+console.log("Content script loaded");
+
 let lastVideoId = null;
 
 function getYouTubeVideoId() {
