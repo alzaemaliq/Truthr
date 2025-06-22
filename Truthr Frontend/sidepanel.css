@@ -36,3 +36,21 @@ body {
   outline: none;
   border: 1px solid #333;
 }
+
+#analyze-btn {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 16px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  background-color: #3a3a3c;
+  color: white;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background-color 0.2s;
+}
+
+#analyze-btn:hover {
+  background-color: #4c4c4e;
+}

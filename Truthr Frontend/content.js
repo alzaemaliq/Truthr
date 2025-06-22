@@ -1,21 +1,19 @@
 console.log("Content script loaded");
 
-let lastVideoId = null;
-
 function getYouTubeVideoId() {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("v");
 }
 
-function checkForVideoChange() {
-  const currentVideoId = getYouTubeVideoId();
-  if (currentVideoId && currentVideoId !== lastVideoId) {
-    lastVideoId = currentVideoId;
-    console.log("Sending video ID to background:", currentVideoId);
-    chrome.runtime.sendMessage({ type: "VIDEO_ID", videoId: currentVideoId });
+// ✅ Listen for button-triggered request from sidepanel.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "REQUEST_VIDEO_ID") {
+    const videoId = getYouTubeVideoId();
+    if (videoId) {
+      console.log("Received REQUEST_VIDEO_ID, sending:", videoId);
+      chrome.runtime.sendMessage({ type: "VIDEO_ID", videoId });
+    } else {
+      console.warn("No video ID found in URL.");
+    }
   }
-}
-
-// Initial check and then poll every second (SPA-safe)
-checkForVideoChange();
-setInterval(checkForVideoChange, 1000);
+});
