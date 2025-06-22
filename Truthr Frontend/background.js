@@ -15,20 +15,34 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
       tabId,
       path: 'sidepanel.html',
       enabled: true
-    });   
+    });
   }
 });
+
+// === CACHED BACKEND RESPONSES ===
+const videoCache = {}; // { [videoId]: backendResponse }
 
 // === HANDLE VIDEO_ID MESSAGES FROM CONTENT SCRIPT ===
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "VIDEO_ID" && message.videoId) {
-    console.log("Video ID received:", message.videoId);
+    const videoId = message.videoId;
 
-    fetch(`https://7k5oajwcvkzcol-8000.proxy.runpod.net/analyze/${message.videoId}`)
+    console.log("Video ID received:", videoId);
+
+    // === Check Cache First ===
+    if (videoCache[videoId]) {
+      console.log("Using cached response for", videoId);
+      chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data: videoCache[videoId] });
+      return true;
+    }
+
+    // === Fetch from Backend If Not Cached ===
+    fetch(`https://7k5oajwcvkzcol-8000.proxy.runpod.net/analyze/${videoId}`)
       .then(res => res.json())
       .then(data => {
         console.log("Backend response:", data);
-        // Optionally store this data for the side panel
+        videoCache[videoId] = data; // Cache it
+        chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data }); // Send to sidepanel
       })
       .catch(err => {
         console.error("Backend error:", err);
