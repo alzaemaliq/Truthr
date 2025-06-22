@@ -22,6 +22,40 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 // === CACHED BACKEND RESPONSES ===
 const videoCache = {}; // { [videoId]: backendResponse }
 
+// === HELPER: Validate if backend response is correct ===
+function isValidResponse(data) {
+  return data && !data.error && Array.isArray(data.claims);
+}
+
+// === HELPER: Retry fetch with max attempts ===
+async function fetchWithRetry(videoId, attempts = 3) {
+  const url = `https://7k5oajwcvkzcol-8000.proxy.runpod.net/analyze/${videoId}`;
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (isValidResponse(data)) {
+        console.log(`Valid backend response received for ${videoId}:`, data);
+        videoCache[videoId] = data; // Only cache if valid
+        chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data });
+        return;
+      } else {
+        console.warn(`Invalid response attempt ${i + 1} for ${videoId}`, data);
+      }
+    } catch (err) {
+      console.error(`Fetch error attempt ${i + 1} for ${videoId}:`, err);
+    }
+  }
+
+  // If all retries fail
+  chrome.runtime.sendMessage({
+    type: "ANALYSIS_RESULT",
+    data: { error: "Failed to fetch valid analysis after 3 attempts." }
+  });
+}
+
 // === HANDLE VIDEO_ID MESSAGES FROM CONTENT SCRIPT ===
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "VIDEO_ID" && message.videoId) {
@@ -29,24 +63,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     console.log("Video ID received:", videoId);
 
-    // === Check Cache First ===
     if (videoCache[videoId]) {
       console.log("Using cached response for", videoId);
       chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data: videoCache[videoId] });
-      return true;
+    } else {
+      fetchWithRetry(videoId);
     }
-
-    // === Fetch from Backend If Not Cached ===
-    fetch(`https://7k5oajwcvkzcol-8000.proxy.runpod.net/analyze/${videoId}`)
-      .then(res => res.json())
-      .then(data => {
-        console.log("Backend response:", data);
-        videoCache[videoId] = data; // Cache it
-        chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data }); // Send to sidepanel
-      })
-      .catch(err => {
-        console.error("Backend error:", err);
-      });
   }
 
   return true;
