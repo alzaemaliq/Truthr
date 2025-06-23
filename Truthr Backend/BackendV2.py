@@ -13,7 +13,7 @@ request_count = 0
 request_lock = Lock()
 
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "truthr-337e8ae71241.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
 
 system_prompt = """
 You are an expert fact-checker and analyst. Your primary objective is to meticulously analyze a given transcript for factual inaccuracies, misleading statements, and unverifiable claims. You are impartial, precise, and rely solely on credible, verifiable sources. You are thorough in your analysis and clear in your presentation of findings. Your tone is neutral and objective.
