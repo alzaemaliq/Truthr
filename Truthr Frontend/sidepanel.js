@@ -18,13 +18,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (output) {
         if (message.data.error) {
-          output.textContent = "Error: " + message.data.error;
+          output.innerHTML = `<div class="error-msg">Error: ${message.data.error}</div>`;
         } else if (Array.isArray(message.data.claims)) {
-          output.textContent = message.data.claims.map((item, index) => {
-            return `${index + 1}. Claim: ${item.Claim}\nStatus: ${item.Status}\nCorrection: ${item.Correction}`;
-          }).join("\n\n");
+          output.innerHTML = message.data.claims.map((item, index) => {
+            return `
+              <div class="claim-card">
+                <p><strong>${index + 1}. Claim:</strong> ${item.Claim}</p>
+                <p><strong>Status:</strong> <span class="status ${item.Status.toLowerCase()}">${item.Status}</span></p>
+                <p><strong>Correction:</strong> ${item.Correction || "N/A"}</p>
+              </div>
+            `;
+          }).join("");
         } else {
-          output.textContent = "Unexpected response format.";
+          output.innerHTML = `<div class="error-msg">Unexpected response format.</div>`;
         }
       }
     }

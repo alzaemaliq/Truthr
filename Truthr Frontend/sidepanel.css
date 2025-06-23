@@ -54,3 +54,41 @@ body {
 #analyze-btn:hover {
   background-color: #4c4c4e;
 }
+
+.claim-card {
+  background-color: #2a2a2c;
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.claim-card p {
+  margin: 6px 0;
+  line-height: 1.4;
+  color: #e0e0e0;
+}
+
+.claim-card strong {
+  color: #ffffff;
+}
+
+.status {
+  font-weight: bold;
+}
+
+.status.false {
+  color: #ff6b6b;
+}
+
+.status.true {
+  color: #6bff8f;
+}
+
+.error-msg {
+  color: #ff4c4c;
+  font-weight: bold;
+  background: #3a1f1f;
+  padding: 10px;
+  border-radius: 8px;
+}
