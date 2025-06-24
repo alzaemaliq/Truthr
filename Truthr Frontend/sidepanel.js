@@ -36,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const correction = item.correction || item.Correction || "N/A";
             return `
             <div class="claim-card">
-              <p><strong>${index + 1}. Claim:</strong> ${claim}</p>
+              <p><strong>Claim:</strong> ${claim}</p>
               <p><strong>Status:</strong> <span class="status ${status.toLowerCase()}">${status}</span></p>
               <p><strong>Correction:</strong> ${correction}</p>
             </div>

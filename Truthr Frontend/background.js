@@ -20,7 +20,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 });
 
 // === CACHED BACKEND RESPONSES ===
-const videoCache = {}; // { [videoId]: backendResponse }
+const videoCache = {};
 
 // === HELPER: Validate if backend response is correct ===
 function isValidResponse(data) {
