@@ -24,7 +24,7 @@ const videoCache = {}; // { [videoId]: backendResponse }
 
 // === HELPER: Validate if backend response is correct ===
 function isValidResponse(data) {
-  return data && !data.error && Array.isArray(data.claims);
+  return data && !data.error && Array.isArray(data.response);
 }
 
 // === HELPER: Retry fetch with max attempts ===
@@ -38,7 +38,7 @@ async function fetchWithRetry(videoId, attempts = 3) {
 
       if (isValidResponse(data)) {
         console.log(`Valid backend response received for ${videoId}:`, data);
-        videoCache[videoId] = data; // Only cache if valid
+        chrome.storage.local.set({ [videoId]: data }); // Persist to storage
         chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data });
         return;
       } else {
@@ -63,12 +63,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     console.log("Video ID received:", videoId);
 
-    if (videoCache[videoId]) {
-      console.log("Using cached response for", videoId);
-      chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data: videoCache[videoId] });
-    } else {
-      fetchWithRetry(videoId);
-    }
+    chrome.storage.local.get(videoId, (result) => {
+      if (result[videoId]) {
+        console.log("Using cached response from storage for", videoId);
+        chrome.runtime.sendMessage({ type: "ANALYSIS_RESULT", data: result[videoId] });
+      } else {
+        fetchWithRetry(videoId);
+      }
+    });
   }
 
   return true;
