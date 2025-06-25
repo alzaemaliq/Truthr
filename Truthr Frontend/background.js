@@ -1,9 +1,13 @@
-// === ENABLE SIDE PANEL BEHAVIOR ON EXTENSION INSTALL ===
+chrome.runtime.onStartup.addListener(() => {
+  chrome.storage.local.clear(() => {
+    console.log("Cleared storage.local on browser startup");
+  });
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
 
-// === ENABLE SIDE PANEL ON YOUTUBE WATCH PAGES ===
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== 'complete' || !tab.url) return;
 
@@ -54,14 +58,12 @@ async function fetchWithRetry(videoId, attempts = 3) {
     }
   }
 
-  // If all retries fail
   chrome.runtime.sendMessage({
     type: "ANALYSIS_RESULT",
     data: { error: "Failed to fetch valid analysis after 3 attempts." }
   });
 }
 
-// === HANDLE VIDEO_ID MESSAGES FROM CONTENT SCRIPT ===
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "VIDEO_ID" && message.videoId) {
     const videoId = message.videoId;
