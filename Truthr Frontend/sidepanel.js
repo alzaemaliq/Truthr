@@ -49,3 +49,45 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "TAB_SWITCHED") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const currentTabId = tabs[0].id;
+      if (message.tabId !== currentTabId) return;
+
+      const output = document.getElementById("claims-output");
+      if (output) {
+        output.innerHTML = `<div class="placeholder-msg">Click "Analyze" to begin.</div>`;
+      }
+    });
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "URL_CHANGED") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const currentTabId = tabs[0].id;
+      if (message.tabId !== currentTabId) return;
+
+      const output = document.getElementById("claims-output");
+      if (output) {
+        output.innerHTML = `<div class="placeholder-msg">Click "Analyze" to begin.</div>`;
+      }
+    });
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "URL_CHANGED") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const currentTabId = tabs[0].id;
+      if (message.tabId !== currentTabId) return;
+
+      const output = document.getElementById("claims-output");
+      if (output) {
+        output.innerHTML = `<div class="placeholder-msg">Click "Analyze" to begin.</div>`;
+      }
+    });
+  }
+});

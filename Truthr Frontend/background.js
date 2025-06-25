@@ -16,6 +16,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
       path: 'sidepanel.html',
       enabled: true
     });
+
+    chrome.runtime.sendMessage({
+      type: "URL_CHANGED",
+      tabId: tabId
+    });
   }
 });
 
@@ -74,4 +79,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return true;
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.runtime.sendMessage({
+    type: "TAB_SWITCHED",
+    tabId: activeInfo.tabId
+  });
 });
